@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tree-trunk-mapper"
+version = "0.1.0"
+description = "Detect and map individual tree trunks from LiDAR point clouds (FinnWoodlands dataset)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "open3d>=0.17",
+    "numpy>=1.24",
+    "click>=8.1",
+    "matplotlib>=3.7",
+    "scipy>=1.10",
+    "scikit-learn>=1.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1",
+]
+
+[project.scripts]
+tree-trunk-mapper = "tree_trunk_mapper.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
