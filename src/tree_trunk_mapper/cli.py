@@ -303,3 +303,97 @@ def visualize(
     plt.close(fig)
 
     click.echo(f"Visualization saved to {output}")
+
+
+@cli.command()
+@click.argument("input_dir", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--glob-pattern",
+    default="*.pcd",
+    show_default=True,
+    help="Glob pattern to find point cloud files.",
+)
+@click.option(
+    "--interval",
+    default=0.1,
+    show_default=True,
+    help="Delay in seconds between frames (simulates real-time arrival).",
+)
+@click.option(
+    "--merge-radius",
+    default=0.5,
+    show_default=True,
+    help="Radius (metres) within which detections are merged.",
+)
+@click.option(
+    "--process-every-n",
+    default=1,
+    show_default=True,
+    help="Process every N-th frame (skip others for performance).",
+)
+@click.option(
+    "--output", "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output path for the final trunk map (JSON). Defaults to <input_dir>/stream_map.json.",
+)
+def stream(
+    input_dir: Path,
+    glob_pattern: str,
+    interval: float,
+    merge_radius: float,
+    process_every_n: int,
+    output: Path | None,
+) -> None:
+    """Stream-process point cloud frames with live stats.
+
+    Simulates real-time streaming by loading files one by one with a
+    configurable delay, detecting trunks incrementally, and printing
+    live statistics.
+    """
+    import json
+    import time
+
+    from tree_trunk_mapper.loader import load_point_cloud
+    from tree_trunk_mapper.streaming import StreamingDetector
+
+    files = sorted(Path(input_dir).glob(glob_pattern))
+    if not files:
+        click.echo(f"No files matching '{glob_pattern}' found in {input_dir}")
+        raise SystemExit(1)
+
+    detector = StreamingDetector(
+        merge_radius=merge_radius,
+        process_every_n=process_every_n,
+    )
+
+    click.echo(f"Streaming {len(files)} frame(s) from {input_dir} ...")
+
+    for i, f in enumerate(files):
+        pcd = load_point_cloud(f)
+        points = np.asarray(pcd.points)
+        result = detector.process_frame(points)
+
+        click.echo(
+            f"[frame {result.frame_count:>4d}] "
+            f"new={len(result.new_detections):>2d}  "
+            f"merged={result.merged_count:>2d}  "
+            f"total_trunks={result.total_trunks:>3d}  "
+            f"time={result.processing_time_ms:>6.1f}ms  "
+            f"file={f.name}"
+        )
+
+        if interval > 0 and i < len(files) - 1:
+            time.sleep(interval)
+
+    click.echo(
+        f"\nDone. Processed {detector.processed_frames}/{detector.total_frames} frames.  "
+        f"Avg processing time: {detector.average_processing_time_ms:.1f} ms"
+    )
+
+    trunk_map = detector.get_map()
+    if output is None:
+        output = Path(input_dir) / "stream_map.json"
+
+    output.write_text(json.dumps([t.to_dict() for t in trunk_map], indent=2))
+    click.echo(f"Mapped {len(trunk_map)} unique trunk(s). Saved to {output}")
