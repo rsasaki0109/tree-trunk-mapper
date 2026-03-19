@@ -1,0 +1,14 @@
+trunk_detector_node:
+  ros__parameters:
+    # Height above ground for breast-height slice (m)
+    slice_height: 1.3
+    # Thickness of the height slice (m)
+    slice_thickness: 0.2
+    # DBSCAN epsilon (m)
+    eps: 0.15
+    # DBSCAN minimum points per cluster
+    min_samples: 20
+    # Radius to merge detections across frames (m)
+    merge_radius: 0.5
+    # Skip frames with fewer points
+    min_points: 100

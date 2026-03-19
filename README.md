@@ -65,6 +65,24 @@ tree-trunk-mapper export trunk_map.json -f geojson -o trunks.geojson
 tree-trunk-mapper export trunk_map.json -f csv -o trunks.csv
 ```
 
+### Streaming / Real-time Mode
+
+Stream-process LiDAR frames as they arrive, with incremental map updates.
+Unlike batch processing, streaming mode detects trunks frame-by-frame and
+continuously merges observations into a persistent map, making it suitable for
+real-time SLAM-style workflows.
+
+```bash
+# Simulate streaming from a directory of PCD files
+tree-trunk-mapper stream scans/ --glob-pattern "*.pcd" --interval 0.1
+
+# Skip every other frame for faster throughput
+tree-trunk-mapper stream scans/ --process-every-n 2 -o live_map.json
+```
+
+Multi-frame accumulation improves accuracy: repeated observations of the same
+trunk are merged, averaging out per-frame noise in position and DBH estimates.
+
 ### Key options
 
 | Option | Default | Description |
@@ -95,6 +113,57 @@ Found 5 trunk(s). Results saved to detections.json
   {"center": [3.7290, 6.1125, 1.3021], "radius": 0.1105, "dbh": 0.2210, "inlier_count": 131}
 ]
 ```
+
+## ROS2 Integration
+
+The package includes an optional ROS2 node for real-time trunk detection from streaming LiDAR data with multi-frame accumulation.
+
+### Launch
+
+```bash
+# With default parameters
+ros2 launch tree_trunk_mapper trunk_detector.launch.py
+
+# With custom topic and parameters
+ros2 launch tree_trunk_mapper trunk_detector.launch.py \
+    points_topic:=/velodyne_points \
+    slice_height:=1.3 \
+    eps:=0.15 \
+    merge_radius:=0.5
+
+# With parameter file
+ros2 run tree_trunk_mapper trunk_detector_node \
+    --ros-args --params-file config/default_params.yaml
+```
+
+### Topics
+
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/points` (input) | `sensor_msgs/PointCloud2` | Input LiDAR point cloud |
+| `/trunk_map/markers` | `visualization_msgs/MarkerArray` | Green cylinders at detected trunk positions |
+| `/trunk_map/poses` | `geometry_msgs/PoseArray` | Trunk positions (for downstream nodes) |
+| `/trunk_map/geojson` | `std_msgs/String` | GeoJSON FeatureCollection of the trunk map |
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `slice_height` | 1.3 | Height above ground for breast-height slice (m) |
+| `slice_thickness` | 0.2 | Thickness of the height slice (m) |
+| `eps` | 0.15 | DBSCAN epsilon (m) |
+| `min_samples` | 20 | DBSCAN minimum points per cluster |
+| `merge_radius` | 0.5 | Radius to merge detections across frames (m) |
+| `min_points` | 100 | Skip frames with fewer points |
+
+### rviz2 Visualization
+
+1. Open rviz2
+2. Add a **MarkerArray** display, set topic to `/trunk_map/markers`
+3. Add a **PoseArray** display, set topic to `/trunk_map/poses`
+4. Set the fixed frame to match your LiDAR frame (e.g., `velodyne`, `os_sensor`)
+
+Detected trunks appear as green semi-transparent cylinders at their estimated positions.
 
 ## Testing
 
