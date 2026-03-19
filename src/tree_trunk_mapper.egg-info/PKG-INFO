@@ -5,6 +5,7 @@ Summary: Detect and map individual tree trunks from LiDAR point clouds (FinnWood
 License: MIT
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
+License-File: LICENSE
 Requires-Dist: open3d>=0.17
 Requires-Dist: numpy>=1.24
 Requires-Dist: click>=8.1
@@ -14,22 +15,52 @@ Requires-Dist: scikit-learn>=1.2
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0; extra == "dev"
 Requires-Dist: ruff>=0.1; extra == "dev"
+Dynamic: license-file
 
 # tree-trunk-mapper
 
+[![CI](https://github.com/rsasaki0109/tree-trunk-mapper/actions/workflows/ci.yml/badge.svg)](https://github.com/rsasaki0109/tree-trunk-mapper/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Detect and map individual tree trunks from LiDAR point clouds, designed for the [FinnWoodlands](https://www.finnwoodlands.fi/) dataset (Ouster OS1 + ZED2 stereo, backpack-mounted, with Spruce/Birch/Pine annotations).
 
-## Pipeline
+## Algorithm
 
-1. **Height slicing** -- Extract a horizontal band at breast height (~1.3 m) to isolate trunk cross-sections.
-2. **DBSCAN clustering** -- Cluster the 2D (xy) points to separate individual trunks.
-3. **Cylinder fitting (RANSAC)** -- Fit a circle/cylinder to each cluster to estimate trunk centre and DBH (diameter at breast height).
-4. **Multi-frame mapping** -- Accumulate detections across frames, merging nearby observations into a persistent trunk map.
+The detection pipeline follows three stages:
+
+```
+Raw Point Cloud
+      |
+      v
+[1] Height Slice (1.3 m +/- 0.1 m)
+      |  Extract a horizontal band at breast height to isolate
+      |  trunk cross-sections, filtering out canopy and ground.
+      v
+[2] DBSCAN Clustering (eps=0.15 m, min_samples=20)
+      |  Cluster the 2D (xy) points so that each cluster
+      |  corresponds to an individual trunk cross-section.
+      v
+[3] RANSAC Cylinder Fitting
+      |  Fit a circle in the xy-plane to each cluster using
+      |  RANSAC (1000 iterations), then refine with least-squares.
+      |  Reject fits outside the valid trunk radius range (2-50 cm).
+      v
+Trunk Detections (centre position + DBH)
+```
+
+**Multi-frame mapping:** When processing a sequence of scans, detections are accumulated in a `TrunkMapper` that merges observations within a configurable radius (default 0.5 m) using incremental mean updates for position and DBH.
 
 ## Installation
 
 ```bash
 pip install -e .
+```
+
+For development (pytest + ruff):
+
+```bash
+pip install -e ".[dev]"
 ```
 
 ## Usage
@@ -62,6 +93,33 @@ tree-trunk-mapper export trunk_map.json -f csv -o trunks.csv
 | `--eps` | 0.15 | DBSCAN epsilon (m) |
 | `--min-samples` | 20 | DBSCAN minimum points per cluster |
 | `--merge-radius` | 0.5 | Radius to merge detections across frames (m) |
+
+## Example output
+
+Detection on a FinnWoodlands scan with 5 trunks:
+
+```
+$ tree-trunk-mapper detect scan.pcd -o detections.json
+Loading point cloud from scan.pcd ...
+Detecting tree trunks ...
+Found 5 trunk(s). Results saved to detections.json
+```
+
+```json
+[
+  {"center": [2.1534, 1.0782, 1.3012], "radius": 0.1247, "dbh": 0.2494, "inlier_count": 142},
+  {"center": [4.5021, 3.2198, 1.2987], "radius": 0.0983, "dbh": 0.1966, "inlier_count": 118},
+  {"center": [0.8812, 5.4401, 1.3045], "radius": 0.1521, "dbh": 0.3042, "inlier_count": 167},
+  {"center": [6.2103, 2.8847, 1.2998], "radius": 0.0871, "dbh": 0.1742, "inlier_count": 95},
+  {"center": [3.7290, 6.1125, 1.3021], "radius": 0.1105, "dbh": 0.2210, "inlier_count": 131}
+]
+```
+
+## Testing
+
+```bash
+pytest -v
+```
 
 ## License
 

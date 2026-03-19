@@ -187,3 +187,119 @@ def export(map_path: Path, fmt: str, output: Path | None) -> None:
         export_csv(trunks, output)
 
     click.echo(f"Exported {len(trunks)} trunk(s) to {output}")
+
+
+@cli.command()
+@click.argument("input_pcd", type=click.Path(exists=True, path_type=Path))
+@click.argument("detections_json", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output", "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output PNG path. Defaults to <detections_json>.png.",
+)
+@click.option(
+    "--slice-height",
+    default=1.3,
+    show_default=True,
+    help="Height above ground for the slice indicator (metres).",
+)
+@click.option(
+    "--slice-thickness",
+    default=0.2,
+    show_default=True,
+    help="Thickness of the height slice indicator (metres).",
+)
+def visualize(
+    input_pcd: Path,
+    detections_json: Path,
+    output: Path | None,
+    slice_height: float,
+    slice_thickness: float,
+) -> None:
+    """Visualize detected trunks overlaid on the point cloud.
+
+    Produces a two-panel PNG: top-down view with detected trunk circles (left)
+    and a side (XZ) view showing the height slice region (right).
+    """
+    import json
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Circle
+
+    from tree_trunk_mapper.loader import load_point_cloud
+    from tree_trunk_mapper.detector import TrunkDetection
+
+    # Load data
+    pcd = load_point_cloud(input_pcd)
+    points = np.asarray(pcd.points)
+
+    raw = json.loads(detections_json.read_text())
+    detections = [TrunkDetection.from_dict(d) for d in raw]
+
+    if output is None:
+        output = detections_json.with_suffix(".png")
+
+    # Estimate ground level for slice indicator
+    ground_z = float(np.percentile(points[:, 2], 5))
+    z_lo = ground_z + slice_height - slice_thickness / 2
+    z_hi = ground_z + slice_height + slice_thickness / 2
+
+    fig, (ax_top, ax_side) = plt.subplots(1, 2, figsize=(16, 8))
+
+    # --- Left panel: top-down (XY) view ---
+    # Subsample points for plotting performance
+    max_plot = 50_000
+    if len(points) > max_plot:
+        idx = np.random.default_rng(0).choice(len(points), max_plot, replace=False)
+        plot_pts = points[idx]
+    else:
+        plot_pts = points
+
+    ax_top.scatter(plot_pts[:, 0], plot_pts[:, 1], s=0.3, c="0.7", alpha=0.4, rasterized=True)
+    for det in detections:
+        circ = Circle(
+            (det.center[0], det.center[1]),
+            det.radius,
+            fill=False,
+            edgecolor="red",
+            linewidth=1.5,
+        )
+        ax_top.add_patch(circ)
+        ax_top.plot(det.center[0], det.center[1], "r+", markersize=6)
+        ax_top.annotate(
+            f"D={det.dbh:.2f}m",
+            (det.center[0], det.center[1]),
+            textcoords="offset points",
+            xytext=(6, 6),
+            fontsize=7,
+            color="red",
+        )
+
+    ax_top.set_xlabel("X (m)")
+    ax_top.set_ylabel("Y (m)")
+    ax_top.set_title(f"Top-Down View  ({len(detections)} trunks detected)")
+    ax_top.set_aspect("equal")
+
+    # --- Right panel: side (XZ) view ---
+    ax_side.scatter(plot_pts[:, 0], plot_pts[:, 2], s=0.3, c="0.7", alpha=0.4, rasterized=True)
+    ax_side.axhspan(z_lo, z_hi, color="green", alpha=0.15, label=f"Slice [{z_lo:.2f}, {z_hi:.2f}]m")
+    ax_side.axhline(z_lo, color="green", linewidth=0.8, linestyle="--")
+    ax_side.axhline(z_hi, color="green", linewidth=0.8, linestyle="--")
+
+    for det in detections:
+        ax_side.plot(det.center[0], det.center[2], "r^", markersize=6)
+
+    ax_side.set_xlabel("X (m)")
+    ax_side.set_ylabel("Z (m)")
+    ax_side.set_title("Side View (XZ) with Height Slice")
+    ax_side.legend(loc="upper right", fontsize=8)
+
+    fig.suptitle(f"tree-trunk-mapper: {input_pcd.name}", fontsize=12, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(str(output), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    click.echo(f"Visualization saved to {output}")
