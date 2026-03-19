@@ -1,5 +1,9 @@
+.gitignore
+LICENSE
 README.md
 pyproject.toml
+.github/workflows/ci.yml
+examples/demo.ipynb
 src/tree_trunk_mapper/__init__.py
 src/tree_trunk_mapper/cli.py
 src/tree_trunk_mapper/detector.py
@@ -12,3 +16,15 @@ src/tree_trunk_mapper.egg-info/dependency_links.txt
 src/tree_trunk_mapper.egg-info/entry_points.txt
 src/tree_trunk_mapper.egg-info/requires.txt
 src/tree_trunk_mapper.egg-info/top_level.txt
+src/tree_trunk_mapper/__pycache__/__init__.cpython-312.pyc
+src/tree_trunk_mapper/__pycache__/cli.cpython-312.pyc
+src/tree_trunk_mapper/__pycache__/detector.cpython-312.pyc
+src/tree_trunk_mapper/__pycache__/export.cpython-312.pyc
+src/tree_trunk_mapper/__pycache__/loader.cpython-312.pyc
+src/tree_trunk_mapper/__pycache__/mapper.cpython-312.pyc
+tests/__init__.py
+tests/conftest.py
+tests/test_cli.py
+tests/test_detector.py
+tests/test_export.py
+tests/test_mapper.py
